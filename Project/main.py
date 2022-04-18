@@ -88,14 +88,15 @@ class Trainer:
                 data.to(self.device)
                 out = self.model(data) 
                 out = out.reshape(-1)
-                y_pred.append(torch.round(torch.sigmoid(out)))
 
                 target = data.y.to(self.device)
                 target = target.float()
-                y_true.append(target)
-
+                
                 loss = self.criterion(out, target)            
                 epoch_loss += loss.item()
+
+                y_pred.append(torch.round(torch.sigmoid(out)))
+                y_true.append(target)
         
         y_pred = torch.hstack(y_pred).cpu()
         y_true = torch.hstack(y_true).cpu()
@@ -103,9 +104,9 @@ class Trainer:
         prec = precision_score(y_true, y_pred, pos_label=1, average='binary')
         rcl = recall_score(y_true, y_pred, pos_label=1, average='binary')
 
-        loss = epoch_loss / len(data_loader)
+        # loss = epoch_loss / len(data_loader)
 
-        return loss, acc, prec, rcl
+        return epoch_loss, acc, prec, rcl
 
     def training(self, train_iter, valid_iter, model_name):
         print()
@@ -159,13 +160,14 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=100, help='training epochs')
 
     args = parser.parse_args()
-    print(args.train)
 
     # === 1. Get dataset ==============================
     # Before creating dataset, destination folder should be empty
     os.system(f'rm -rf dataset/processed/*')
 
-    dataset = GraphExprDataset('dataset', '40k_train.json', '40k_test.json', '40k_val_shallow.json')
+    is_dag = False
+    valid_depth = [1,2,3,4,5,6,7,8,9,10,11,12,13]
+    dataset = GraphExprDataset('dataset', '40k_train.json', '40k_test.json', '40k_val_shallow.json', is_dag, valid_depth)
     train_set = dataset[:dataset.train_size]
     test_set = dataset[dataset.train_size: (dataset.train_size+dataset.test_size)]
     valid_set = dataset[(-dataset.val_size):]
@@ -178,6 +180,7 @@ if __name__ == '__main__':
     print(f'Number of testing graphs: {len(test_set)}')
     print(f'Number of valid graphs: {len(valid_set)}')
     print(f'Symbol vocab: {dataset.symbol_vocab}')
+    print(f'DAG symbol vocab: {dataset.dag_symbol_vocab}')
     print(f'Batch size: {args.batch_size}')
 
 
@@ -186,7 +189,10 @@ if __name__ == '__main__':
     output_dim = 1
     model = Model(input_dim, output_dim).build_model()
 
-    model_name = 'graphmr_ast'
+    if is_dag:
+        model_name = 'graphmr_dag'
+    else:
+        model_name = 'graphmr_ast'
     # # === 3. Training ==============================
     if args.train:
         train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
